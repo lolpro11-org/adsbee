@@ -8,7 +8,8 @@
 #include "spi_coprocessor.hh"
 #include "task_priorities.hh"
 #include "unit_conversions.hh"
-
+#include <sys/dirent.h>
+#include <dirent.h>
 // #define VERBOSE_DEBUG
 
 static const uint16_t kGDL90Port = 4000;
