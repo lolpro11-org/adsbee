@@ -11,10 +11,10 @@
 
 #include <sys/dirent.h>
 #include <dirent.h>
-#include "esp_vfs_fat.h"
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
-#include "sdmmc_cmd.h"
+#include "driver/gpio.h"
+#include "esp_vfs_fat.h"
 
 // #define VERBOSE_DEBUG
 
@@ -65,41 +65,6 @@ void console_ws_close_fd(httpd_handle_t hd, int sockfd) {
 /** End "Pass-Through" functions. **/
 
 bool ADSBeeServer::Init() {
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num = 18,
-        .miso_io_num = 17,
-        .sclk_io_num = 21,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-    };
-    ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &bus_cfg, SPI_DMA_CH_AUTO));
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.host_id = SPI2_HOST;
-    slot_config.gpio_cs = 22;
-    sdmmc_card_t *card;
-    const esp_vfs_fat_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 10,
-        .allocation_unit_size = 16 * 1024
-    };
-
-    esp_err_t ret = esp_vfs_fat_sdspi_mount(
-        "/sdcard",
-        &slot_config,
-        &mount_config,
-        &card
-    );
-
-    if (ret != ESP_OK) {
-        ESP_LOGE("SD", "Failed to mount card");
-    } else {
-        ESP_LOGI("SD", "SD card mounted");
-    }
-
-    if (!pico.Init()) {
-        CONSOLE_ERROR("ADSBeeServer::Init", "SPI Coprocessor initialization failed.");
-        return false;
-    }
 
     // Initialize SPI receive task before requesting settings so that we can tend to messages from the RP2040 and stop
     // it from freaking out.
@@ -134,6 +99,37 @@ bool ADSBeeServer::Init() {
     vSemaphoreDelete(settings_read_semaphore);
     settings_manager.Print();
     settings_manager.Apply();
+
+    esp_err_t ret;
+
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num = GPIO_NUM_23,
+        .miso_io_num = GPIO_NUM_19,
+        .sclk_io_num = GPIO_NUM_18,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 4000,
+    };
+
+    ret = spi_bus_initialize(SDSPI_HOST, &bus_cfg, SDSPI_DEFAULT_DMA);
+    ESP_ERROR_CHECK(ret);
+
+    sdspi_device_config_t slot_cfg = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_cfg.gpio_cs = GPIO_NUM_22;     // CS pin
+    slot_cfg.host_id = SDSPI_HOST;
+
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+
+    sdmmc_card_t* card;
+    const char mount_point[] = "/sdcard";
+
+    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_cfg, NULL, &card);
+    //if (ret != ESP_OK) {
+    //    printf("Mount failed: %s\n", esp_err_to_name(ret));
+    //    return;
+    //}
+
+    //printf("SD card mounted.\n");
 
     return TCPServerInit();
 }
