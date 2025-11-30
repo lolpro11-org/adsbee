@@ -465,6 +465,95 @@ esp_err_t favicon_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t fs_list_dir_handler(httpd_req_t *req) {
+    char path[256];
+    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/list"));
+
+    DIR *dir = opendir(path);
+    if (!dir) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Directory not found");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr_chunk(req, "[");
+
+    struct dirent *entry;
+    bool first = true;
+    while ((entry = readdir(dir)) != NULL) {
+        if (!first) httpd_resp_sendstr_chunk(req, ",");
+        first = false;
+
+        httpd_resp_sendstr_chunk(req, "\"");
+        httpd_resp_sendstr_chunk(req, entry->d_name);
+        httpd_resp_sendstr_chunk(req, "\"");
+    }
+
+    closedir(dir);
+    httpd_resp_sendstr_chunk(req, "]");
+    httpd_resp_sendstr_chunk(req, NULL);
+
+    return ESP_OK;
+}
+
+static esp_err_t fs_get_file_handler(httpd_req_t *req) {
+    char path[256];
+    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_set_type(req, "application/octet-stream");
+
+    char buf[1024];
+    size_t r;
+    while ((r = fread(buf, 1, sizeof(buf), f)) > 0) {
+        httpd_resp_send_chunk(req, buf, r);
+    }
+
+    fclose(f);
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+static esp_err_t fs_put_file_handler(httpd_req_t *req) {
+    char path[256];
+    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
+
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot create file");
+        return ESP_FAIL;
+    }
+
+    char buf[1024];
+    int received;
+
+    while ((received = httpd_req_recv(req, buf, sizeof(buf))) > 0) {
+        fwrite(buf, 1, received, f);
+    }
+
+    fclose(f);
+    httpd_resp_sendstr(req, "OK");
+    return ESP_OK;
+}
+
+static esp_err_t fs_delete_file_handler(httpd_req_t *req) {
+    char path[256];
+    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
+
+    if (unlink(path) != 0) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Delete failed");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_sendstr(req, "DELETED");
+    return ESP_OK;
+}
+
 void NetworkConsolePostConnectCallback(WebSocketServer *ws_server, int client_fd) {
     char welcome_message[kNetworkConsoleWelcomeMessageMaxLen];
     if (object_dictionary.kFirmwareVersionReleaseCandidate == 0) {
@@ -596,100 +685,6 @@ void ADSBeeServer::SendNetworkMetricsMessage() {
     network_metrics.BroadcastMessage(metrics_message, strnlen(metrics_message, kNetworkMetricsMessageMaxLen));
 }
 
-
-static esp_err_t fs_list_dir_handler(httpd_req_t *req)
-{
-    char path[256];
-    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/list"));
-
-    DIR *dir = opendir(path);
-    if (!dir) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Directory not found");
-        return ESP_FAIL;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr_chunk(req, "[");
-
-    struct dirent *entry;
-    bool first = true;
-    while ((entry = readdir(dir)) != NULL) {
-        if (!first) httpd_resp_sendstr_chunk(req, ",");
-        first = false;
-
-        httpd_resp_sendstr_chunk(req, "\"");
-        httpd_resp_sendstr_chunk(req, entry->d_name);
-        httpd_resp_sendstr_chunk(req, "\"");
-    }
-
-    closedir(dir);
-    httpd_resp_sendstr_chunk(req, "]");
-    httpd_resp_sendstr_chunk(req, NULL);
-
-    return ESP_OK;
-}
-
-static esp_err_t fs_get_file_handler(httpd_req_t *req)
-{
-    char path[256];
-    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
-
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
-        return ESP_FAIL;
-    }
-
-    httpd_resp_set_type(req, "application/octet-stream");
-
-    char buf[1024];
-    size_t r;
-    while ((r = fread(buf, 1, sizeof(buf), f)) > 0) {
-        httpd_resp_send_chunk(req, buf, r);
-    }
-
-    fclose(f);
-    httpd_resp_send_chunk(req, NULL, 0);
-    return ESP_OK;
-}
-
-static esp_err_t fs_put_file_handler(httpd_req_t *req)
-{
-    char path[256];
-    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
-
-    FILE *f = fopen(path, "wb");
-    if (!f) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot create file");
-        return ESP_FAIL;
-    }
-
-    char buf[1024];
-    int received;
-
-    while ((received = httpd_req_recv(req, buf, sizeof(buf))) > 0) {
-        fwrite(buf, 1, received, f);
-    }
-
-    fclose(f);
-    httpd_resp_sendstr(req, "OK");
-    return ESP_OK;
-}
-
-static esp_err_t fs_delete_file_handler(httpd_req_t *req)
-{
-    char path[256];
-    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
-
-    if (unlink(path) != 0) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Delete failed");
-        return ESP_FAIL;
-    }
-
-    httpd_resp_sendstr(req, "DELETED");
-    return ESP_OK;
-}
-
 bool ADSBeeServer::TCPServerInit() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.stack_size = kHTTPServerStackSizeBytes;
@@ -731,43 +726,24 @@ bool ADSBeeServer::TCPServerInit() {
                                            .post_connect_callback = nullptr,
                                            .message_received_callback = nullptr});
         network_metrics.Init();
+
+
         httpd_uri_t fs_get_file = {
-            .uri       = "/fs/file/*",
-            .method    = HTTP_GET,
-            .handler   = fs_get_file_handler,
-            .user_ctx  = NULL,
-            .is_websocket = false,
-        };
+            .uri = "/fs/file/*", .method = HTTP_GET, .handler = favicon_handler, .user_ctx = NULL, .is_websocket = false};
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_get_file));
 
-        // PUT /fs/file/<path>  (upload)
         httpd_uri_t fs_put_file = {
-            .uri       = "/fs/file/*",
-            .method    = HTTP_PUT,
-            .handler   = fs_put_file_handler,
-            .user_ctx  = NULL,
-            .is_websocket = false,
-        };
+            .uri = "/fs/file/*", .method = HTTP_PUT, .handler = favicon_handler, .user_ctx = NULL, .is_websocket = false};
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_put_file));
 
         // DELETE /fs/file/<path>  (delete)
         httpd_uri_t fs_delete_file = {
-            .uri       = "/fs/file/*",
-            .method    = HTTP_DELETE,
-            .handler   = fs_delete_file_handler,
-            .user_ctx  = NULL,
-            .is_websocket = false,
-        };
+            .uri = "/fs/file/*", .method = HTTP_DELETE, .handler = favicon_handler, .user_ctx = NULL, .is_websocket = false};
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_delete_file));
 
         // GET /fs/list/<path>   (directory listing)
         httpd_uri_t fs_list_dir = {
-            .uri       = "/fs/list/*",
-            .method    = HTTP_GET,
-            .handler   = fs_list_dir_handler,
-            .user_ctx  = NULL,
-            .is_websocket = false,
-        };
+            .uri = "/fs/list/*", .method = HTTP_GET, .handler = favicon_handler, .user_ctx = NULL, .is_websocket = false};
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_list_dir));
 
     } else {
