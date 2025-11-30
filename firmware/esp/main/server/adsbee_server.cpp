@@ -107,7 +107,7 @@ bool ADSBeeServer::Init() {
     settings_manager.Print();
     settings_manager.Apply();
 
-    esp_err_t ret;
+    /*esp_err_t ret;
 
     // SDSPI host config (SPI2 = HSPI)
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
@@ -142,7 +142,7 @@ bool ADSBeeServer::Init() {
 
     ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
     //printf("SD card mounted successfully!\n");
-    sdmmc_card_print_info(stdout, card);
+    sdmmc_card_print_info(stdout, card);*/
 
 
     return TCPServerInit();
