@@ -18,10 +18,10 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 
-#define PIN_MISO 17
-#define PIN_MOSI 18
-#define PIN_CLK  21
-#define PIN_CS   22
+#define PIN_MISO GPIO_NUM_17
+#define PIN_MOSI GPIO_NUM_18
+#define PIN_CLK  GPIO_NUM_21
+#define PIN_CS   GPIO_NUM_22
 
 // #define VERBOSE_DEBUG
 
@@ -123,15 +123,11 @@ bool ADSBeeServer::Init() {
         .max_transfer_sz = 4000,
     };
 
-    ret = spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
-    if (ret != ESP_OK) {
-        printf("Failed to initialize SPI bus: %s\n", esp_err_to_name(ret));
-        return;
-    }
+    ret = spi_bus_initialize(static_cast<spi_host_device_t>(host.slot), &bus_cfg, SDSPI_DEFAULT_DMA);
 
     // SDSPI device slot config
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.host_id = host.slot;
+    slot_config.host_id = static_cast<spi_host_device_t>(host.slot);
     slot_config.gpio_cs = PIN_CS;
 
     // Mount point
@@ -145,11 +141,6 @@ bool ADSBeeServer::Init() {
     };
 
     ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
-    //if (ret != ESP_OK) {
-    //    printf("Failed to mount FAT filesystem: %s\n", esp_err_to_name(ret));
-    //    return;
-    //}
-
     //printf("SD card mounted successfully!\n");
     sdmmc_card_print_info(stdout, card);
 
