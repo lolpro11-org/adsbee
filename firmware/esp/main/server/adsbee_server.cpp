@@ -11,10 +11,17 @@
 
 #include <sys/dirent.h>
 #include <dirent.h>
+
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
 #include "driver/gpio.h"
 #include "esp_vfs_fat.h"
+#include "sdmmc_cmd.h"
+
+#define PIN_MISO 17
+#define PIN_MOSI 18
+#define PIN_CLK  21
+#define PIN_CS   22
 
 // #define VERBOSE_DEBUG
 
@@ -102,34 +109,50 @@ bool ADSBeeServer::Init() {
 
     esp_err_t ret;
 
+    // SDSPI host config (SPI2 = HSPI)
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = SPI2_HOST;  // Use HSPI (SPI2)
+
+    // SPI bus configuration
     spi_bus_config_t bus_cfg = {
-        .mosi_io_num = GPIO_NUM_23,
-        .miso_io_num = GPIO_NUM_19,
-        .sclk_io_num = GPIO_NUM_18,
+        .mosi_io_num = PIN_MOSI,
+        .miso_io_num = PIN_MISO,
+        .sclk_io_num = PIN_CLK,
         .quadwp_io_num = -1,
         .quadhd_io_num = -1,
         .max_transfer_sz = 4000,
     };
 
-    ret = spi_bus_initialize(SDSPI_HOST, &bus_cfg, SDSPI_DEFAULT_DMA);
-    ESP_ERROR_CHECK(ret);
+    ret = spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
+    if (ret != ESP_OK) {
+        printf("Failed to initialize SPI bus: %s\n", esp_err_to_name(ret));
+        return;
+    }
 
-    sdspi_device_config_t slot_cfg = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_cfg.gpio_cs = GPIO_NUM_22;     // CS pin
-    slot_cfg.host_id = SDSPI_HOST;
+    // SDSPI device slot config
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.host_id = host.slot;
+    slot_config.gpio_cs = PIN_CS;
 
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-
-    sdmmc_card_t* card;
+    // Mount point
     const char mount_point[] = "/sdcard";
 
-    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_cfg, NULL, &card);
+    sdmmc_card_t *card;
+    const esp_vfs_fat_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024
+    };
+
+    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
     //if (ret != ESP_OK) {
-    //    printf("Mount failed: %s\n", esp_err_to_name(ret));
+    //    printf("Failed to mount FAT filesystem: %s\n", esp_err_to_name(ret));
     //    return;
     //}
 
-    //printf("SD card mounted.\n");
+    //printf("SD card mounted successfully!\n");
+    sdmmc_card_print_info(stdout, card);
+
 
     return TCPServerInit();
 }
