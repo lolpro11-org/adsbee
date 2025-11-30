@@ -18,10 +18,10 @@
 #include "esp_vfs_fat.h"
 #include "sdmmc_cmd.h"
 
-#define PIN_MISO GPIO_NUM_17
-#define PIN_MOSI GPIO_NUM_18
-#define PIN_CLK  GPIO_NUM_21
-#define PIN_CS   GPIO_NUM_22
+#define PIN_MISO GPIO_NUM_13
+#define PIN_MOSI GPIO_NUM_14
+#define PIN_CLK  GPIO_NUM_17
+#define PIN_CS   GPIO_NUM_18
 
 // #define VERBOSE_DEBUG
 
