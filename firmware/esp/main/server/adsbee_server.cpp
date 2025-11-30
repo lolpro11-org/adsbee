@@ -8,8 +8,14 @@
 #include "spi_coprocessor.hh"
 #include "task_priorities.hh"
 #include "unit_conversions.hh"
+
 #include <sys/dirent.h>
 #include <dirent.h>
+#include "esp_vfs_fat.h"
+#include "driver/sdspi_host.h"
+#include "driver/spi_common.h"
+#include "sdmmc_cmd.h"
+
 // #define VERBOSE_DEBUG
 
 static const uint16_t kGDL90Port = 4000;
@@ -59,6 +65,37 @@ void console_ws_close_fd(httpd_handle_t hd, int sockfd) {
 /** End "Pass-Through" functions. **/
 
 bool ADSBeeServer::Init() {
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num = 18,
+        .miso_io_num = 17,
+        .sclk_io_num = 21,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+    };
+    ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &bus_cfg, SPI_DMA_CH_AUTO));
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.host_id = SPI2_HOST;
+    slot_config.gpio_cs = 22;
+    sdmmc_card_t *card;
+    const esp_vfs_fat_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 10,
+        .allocation_unit_size = 16 * 1024
+    };
+
+    esp_err_t ret = esp_vfs_fat_sdspi_mount(
+        "/sdcard",
+        &slot_config,
+        &mount_config,
+        &card
+    );
+
+    if (ret != ESP_OK) {
+        ESP_LOGE("SD", "Failed to mount card");
+    } else {
+        ESP_LOGI("SD", "SD card mounted");
+    }
+
     if (!pico.Init()) {
         CONSOLE_ERROR("ADSBeeServer::Init", "SPI Coprocessor initialization failed.");
         return false;
