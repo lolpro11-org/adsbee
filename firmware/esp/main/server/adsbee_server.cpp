@@ -548,98 +548,6 @@ void ADSBeeServer::SendNetworkMetricsMessage() {
     network_metrics.BroadcastMessage(metrics_message, strnlen(metrics_message, kNetworkMetricsMessageMaxLen));
 }
 
-bool ADSBeeServer::TCPServerInit() {
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.stack_size = kHTTPServerStackSizeBytes;
-    config.close_fn = console_ws_close_fd;
-
-    esp_err_t ret = httpd_start(&server, &config);
-    if (ret == ESP_OK) {
-        // Root URI handler (HTML)
-        httpd_uri_t root = {
-            .uri = "/", .method = HTTP_GET, .handler = root_handler, .user_ctx = NULL, .is_websocket = false};
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &root));
-
-        // CSS URI handler
-        httpd_uri_t css = {
-            .uri = "/style.css", .method = HTTP_GET, .handler = css_handler, .user_ctx = NULL, .is_websocket = false};
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &css));
-
-        // Favicon URI handler
-        httpd_uri_t favicon = {.uri = "/favicon.png",
-                               .method = HTTP_GET,
-                               .handler = favicon_handler,
-                               .user_ctx = NULL,
-                               .is_websocket = false};
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &favicon));
-
-        network_console = WebSocketServer({.label = "Network Console",
-                                           .server = server,
-                                           .uri = "/console",
-                                           .num_clients_allowed = WebSocketServer::kMaxNumClients,
-                                           .send_as_binary = true,  // Network console messages can contain binary data.
-                                           .post_connect_callback = NetworkConsolePostConnectCallback,
-                                           .message_received_callback = NetworkConsoleMessageReceivedCallback});
-        network_console.Init();
-        network_metrics = WebSocketServer({.label = "Network Metrics",
-                                           .server = server,
-                                           .uri = "/metrics",
-                                           .num_clients_allowed = WebSocketServer::kMaxNumClients,
-                                           .send_as_binary = false,  // Network metrics are always ASCII.
-                                           .post_connect_callback = nullptr,
-                                           .message_received_callback = nullptr});
-        network_metrics.Init();
-        httpd_uri_t fs_get_file = {
-            .uri       = "/fs/file/*",
-            .method    = HTTP_GET,
-            .handler   = fs_get_file_handler,
-            .user_ctx  = NULL,
-            .is_websocket = false,
-        };
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_get_file));
-
-        // PUT /fs/file/<path>  (upload)
-        httpd_uri_t fs_put_file = {
-            .uri       = "/fs/file/*",
-            .method    = HTTP_PUT,
-            .handler   = fs_put_file_handler,
-            .user_ctx  = NULL,
-            .is_websocket = false,
-        };
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_put_file));
-
-        // DELETE /fs/file/<path>  (delete)
-        httpd_uri_t fs_delete_file = {
-            .uri       = "/fs/file/*",
-            .method    = HTTP_DELETE,
-            .handler   = fs_delete_file_handler,
-            .user_ctx  = NULL,
-            .is_websocket = false,
-        };
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_delete_file));
-
-        // GET /fs/list/<path>   (directory listing)
-        httpd_uri_t fs_list_dir = {
-            .uri       = "/fs/list/*",
-            .method    = HTTP_GET,
-            .handler   = fs_list_dir_handler,
-            .user_ctx  = NULL,
-            .is_websocket = false,
-        };
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_list_dir));
-
-    } else {
-        CONSOLE_ERROR("ADSBeeServer::TCPServerInit", "Failed to start HTTP server: %s, remaining stack %u Bytes.",
-                      esp_err_to_name(ret), uxTaskGetStackHighWaterMark(NULL));
-        return false;
-    }
-
-    // xTaskCreatePinnedToCore(tcp_server_task, "tcp_server", kTCPServerTaskStackSizeBytes, NULL,
-    // kTCPServerTaskPriority,
-    //                         NULL, kTCPServerTaskCore);
-
-    return server != nullptr;
-}
 
 static esp_err_t fs_list_dir_handler(httpd_req_t *req)
 {
@@ -733,3 +641,97 @@ static esp_err_t fs_delete_file_handler(httpd_req_t *req)
     httpd_resp_sendstr(req, "DELETED");
     return ESP_OK;
 }
+
+bool ADSBeeServer::TCPServerInit() {
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.stack_size = kHTTPServerStackSizeBytes;
+    config.close_fn = console_ws_close_fd;
+
+    esp_err_t ret = httpd_start(&server, &config);
+    if (ret == ESP_OK) {
+        // Root URI handler (HTML)
+        httpd_uri_t root = {
+            .uri = "/", .method = HTTP_GET, .handler = root_handler, .user_ctx = NULL, .is_websocket = false};
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &root));
+
+        // CSS URI handler
+        httpd_uri_t css = {
+            .uri = "/style.css", .method = HTTP_GET, .handler = css_handler, .user_ctx = NULL, .is_websocket = false};
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &css));
+
+        // Favicon URI handler
+        httpd_uri_t favicon = {.uri = "/favicon.png",
+                               .method = HTTP_GET,
+                               .handler = favicon_handler,
+                               .user_ctx = NULL,
+                               .is_websocket = false};
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &favicon));
+
+        network_console = WebSocketServer({.label = "Network Console",
+                                           .server = server,
+                                           .uri = "/console",
+                                           .num_clients_allowed = WebSocketServer::kMaxNumClients,
+                                           .send_as_binary = true,  // Network console messages can contain binary data.
+                                           .post_connect_callback = NetworkConsolePostConnectCallback,
+                                           .message_received_callback = NetworkConsoleMessageReceivedCallback});
+        network_console.Init();
+        network_metrics = WebSocketServer({.label = "Network Metrics",
+                                           .server = server,
+                                           .uri = "/metrics",
+                                           .num_clients_allowed = WebSocketServer::kMaxNumClients,
+                                           .send_as_binary = false,  // Network metrics are always ASCII.
+                                           .post_connect_callback = nullptr,
+                                           .message_received_callback = nullptr});
+        network_metrics.Init();
+        httpd_uri_t fs_get_file = {
+            .uri       = "/fs/file/*",
+            .method    = HTTP_GET,
+            .handler   = fs_get_file_handler,
+            .user_ctx  = NULL,
+            .is_websocket = false,
+        };
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_get_file));
+
+        // PUT /fs/file/<path>  (upload)
+        httpd_uri_t fs_put_file = {
+            .uri       = "/fs/file/*",
+            .method    = HTTP_PUT,
+            .handler   = fs_put_file_handler,
+            .user_ctx  = NULL,
+            .is_websocket = false,
+        };
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_put_file));
+
+        // DELETE /fs/file/<path>  (delete)
+        httpd_uri_t fs_delete_file = {
+            .uri       = "/fs/file/*",
+            .method    = HTTP_DELETE,
+            .handler   = fs_delete_file_handler,
+            .user_ctx  = NULL,
+            .is_websocket = false,
+        };
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_delete_file));
+
+        // GET /fs/list/<path>   (directory listing)
+        httpd_uri_t fs_list_dir = {
+            .uri       = "/fs/list/*",
+            .method    = HTTP_GET,
+            .handler   = fs_list_dir_handler,
+            .user_ctx  = NULL,
+            .is_websocket = false,
+        };
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_list_dir));
+
+    } else {
+        CONSOLE_ERROR("ADSBeeServer::TCPServerInit", "Failed to start HTTP server: %s, remaining stack %u Bytes.",
+                      esp_err_to_name(ret), uxTaskGetStackHighWaterMark(NULL));
+        return false;
+    }
+
+    // xTaskCreatePinnedToCore(tcp_server_task, "tcp_server", kTCPServerTaskStackSizeBytes, NULL,
+    // kTCPServerTaskPriority,
+    //                         NULL, kTCPServerTaskCore);
+
+    return server != nullptr;
+}
+
