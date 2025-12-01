@@ -9,6 +9,20 @@
 #include "task_priorities.hh"
 #include "unit_conversions.hh"
 
+#include <sys/dirent.h>
+#include <dirent.h>
+
+#include "driver/sdspi_host.h"
+#include "driver/spi_common.h"
+#include "driver/gpio.h"
+#include "esp_vfs_fat.h"
+#include "sdmmc_cmd.h"
+
+#define PIN_MISO GPIO_NUM_13
+#define PIN_MOSI GPIO_NUM_14
+#define PIN_CLK  GPIO_NUM_17
+#define PIN_CS   GPIO_NUM_18
+
 // #define VERBOSE_DEBUG
 
 static const uint16_t kGDL90Port = 4000;
@@ -96,6 +110,43 @@ bool ADSBeeServer::Init() {
     vSemaphoreDelete(settings_read_semaphore);
     settings_manager.Print();
     settings_manager.Apply();
+
+    esp_err_t ret;
+
+    // SDSPI host config (SPI2 = HSPI)
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = SPI2_HOST;  // Use HSPI (SPI2)
+
+    // SPI bus configuration
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num = PIN_MOSI,
+        .miso_io_num = PIN_MISO,
+        .sclk_io_num = PIN_CLK,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 4000,
+    };
+
+    ret = spi_bus_initialize(static_cast<spi_host_device_t>(host.slot), &bus_cfg, SDSPI_DEFAULT_DMA);
+
+    // SDSPI device slot config
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.host_id = static_cast<spi_host_device_t>(host.slot);
+    slot_config.gpio_cs = PIN_CS;
+
+    // Mount point
+    const char mount_point[] = "/sdcard";
+
+    sdmmc_card_t *card;
+    const esp_vfs_fat_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024
+    };
+
+    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
+    //printf("SD card mounted successfully!\n");
+    sdmmc_card_print_info(stdout, card);
 
     return TCPServerInit();
 }
