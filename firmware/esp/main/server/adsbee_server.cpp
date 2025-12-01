@@ -120,7 +120,6 @@ bool ADSBeeServer::Init() {
     sdmmc_card_t *card;
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = SPI2_HOST;
     const char mount_point[] = "/sdcard";
 
     spi_bus_config_t bus_cfg = {
@@ -136,7 +135,7 @@ bool ADSBeeServer::Init() {
 
     // SDSPI device slot config
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.gpio_cs = PIN_NUM_CS;
+    slot_config.gpio_cs = PIN_CS;
     slot_config.host_id = host.slot;
 
     ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
