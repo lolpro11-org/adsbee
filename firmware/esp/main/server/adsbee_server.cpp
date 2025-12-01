@@ -9,20 +9,6 @@
 #include "task_priorities.hh"
 #include "unit_conversions.hh"
 
-#include <sys/dirent.h>
-#include <dirent.h>
-
-#include "driver/sdspi_host.h"
-#include "driver/spi_common.h"
-#include "driver/gpio.h"
-#include "esp_vfs_fat.h"
-#include "sdmmc_cmd.h"
-
-#define PIN_MISO GPIO_NUM_13
-#define PIN_MOSI GPIO_NUM_14
-#define PIN_CLK  GPIO_NUM_17
-#define PIN_CS   GPIO_NUM_18
-
 // #define VERBOSE_DEBUG
 
 static const uint16_t kGDL90Port = 4000;
@@ -72,6 +58,10 @@ void console_ws_close_fd(httpd_handle_t hd, int sockfd) {
 /** End "Pass-Through" functions. **/
 
 bool ADSBeeServer::Init() {
+    if (!pico.Init()) {
+        CONSOLE_ERROR("ADSBeeServer::Init", "SPI Coprocessor initialization failed.");
+        return false;
+    }
 
     // Initialize SPI receive task before requesting settings so that we can tend to messages from the RP2040 and stop
     // it from freaking out.
@@ -106,44 +96,6 @@ bool ADSBeeServer::Init() {
     vSemaphoreDelete(settings_read_semaphore);
     settings_manager.Print();
     settings_manager.Apply();
-
-    /*esp_err_t ret;
-
-    // SDSPI host config (SPI2 = HSPI)
-    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = SPI2_HOST;  // Use HSPI (SPI2)
-
-    // SPI bus configuration
-    spi_bus_config_t bus_cfg = {
-        .mosi_io_num = PIN_MOSI,
-        .miso_io_num = PIN_MISO,
-        .sclk_io_num = PIN_CLK,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = 4000,
-    };
-
-    ret = spi_bus_initialize(static_cast<spi_host_device_t>(host.slot), &bus_cfg, SDSPI_DEFAULT_DMA);
-
-    // SDSPI device slot config
-    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
-    slot_config.host_id = static_cast<spi_host_device_t>(host.slot);
-    slot_config.gpio_cs = PIN_CS;
-
-    // Mount point
-    const char mount_point[] = "/sdcard";
-
-    sdmmc_card_t *card;
-    const esp_vfs_fat_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
-        .max_files = 5,
-        .allocation_unit_size = 16 * 1024
-    };
-
-    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
-    //printf("SD card mounted successfully!\n");
-    sdmmc_card_print_info(stdout, card);*/
-
 
     return TCPServerInit();
 }
@@ -443,6 +395,13 @@ static esp_err_t root_handler(httpd_req_t *req) {
     return ESP_OK;
 }
 
+static esp_err_t hello_handler(httpd_req_t *req) {
+    const char *resp_str = "Hello, world!";
+    httpd_resp_send(req, resp_str, strlen(resp_str));
+    return ESP_OK;
+}
+
+
 static esp_err_t css_handler(httpd_req_t *req) {
     // Set the CSS content type
     httpd_resp_set_type(req, "text/css");
@@ -462,95 +421,6 @@ esp_err_t favicon_handler(httpd_req_t *req) {
         ESP_LOGE("FAVICON", "Failed to send favicon");
         return res;
     }
-    return ESP_OK;
-}
-
-static esp_err_t fs_list_dir_handler(httpd_req_t *req) {
-    char path[256];
-    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/list"));
-
-    DIR *dir = opendir(path);
-    if (!dir) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Directory not found");
-        return ESP_FAIL;
-    }
-
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr_chunk(req, "[");
-
-    struct dirent *entry;
-    bool first = true;
-    while ((entry = readdir(dir)) != NULL) {
-        if (!first) httpd_resp_sendstr_chunk(req, ",");
-        first = false;
-
-        httpd_resp_sendstr_chunk(req, "\"");
-        httpd_resp_sendstr_chunk(req, entry->d_name);
-        httpd_resp_sendstr_chunk(req, "\"");
-    }
-
-    closedir(dir);
-    httpd_resp_sendstr_chunk(req, "]");
-    httpd_resp_sendstr_chunk(req, NULL);
-
-    return ESP_OK;
-}
-
-static esp_err_t fs_get_file_handler(httpd_req_t *req) {
-    char path[256];
-    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
-
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "File not found");
-        return ESP_FAIL;
-    }
-
-    httpd_resp_set_type(req, "application/octet-stream");
-
-    char buf[1024];
-    size_t r;
-    while ((r = fread(buf, 1, sizeof(buf), f)) > 0) {
-        httpd_resp_send_chunk(req, buf, r);
-    }
-
-    fclose(f);
-    httpd_resp_send_chunk(req, NULL, 0);
-    return ESP_OK;
-}
-
-static esp_err_t fs_put_file_handler(httpd_req_t *req) {
-    char path[256];
-    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
-
-    FILE *f = fopen(path, "wb");
-    if (!f) {
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Cannot create file");
-        return ESP_FAIL;
-    }
-
-    char buf[1024];
-    int received;
-
-    while ((received = httpd_req_recv(req, buf, sizeof(buf))) > 0) {
-        fwrite(buf, 1, received, f);
-    }
-
-    fclose(f);
-    httpd_resp_sendstr(req, "OK");
-    return ESP_OK;
-}
-
-static esp_err_t fs_delete_file_handler(httpd_req_t *req) {
-    char path[256];
-    snprintf(path, sizeof(path), "/sdcard%s", req->uri + strlen("/fs/file"));
-
-    if (unlink(path) != 0) {
-        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Delete failed");
-        return ESP_FAIL;
-    }
-
-    httpd_resp_sendstr(req, "DELETED");
     return ESP_OK;
 }
 
@@ -697,6 +567,10 @@ bool ADSBeeServer::TCPServerInit() {
             .uri = "/", .method = HTTP_GET, .handler = root_handler, .user_ctx = NULL, .is_websocket = false};
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &root));
 
+        httpd_uri_t hello = {
+            .uri = "/", .method = HTTP_GET, .handler = hello_handler, .user_ctx = NULL, .is_websocket = false};
+            ESP_ERROR_CHECK(httpd_register_uri_handler(server, &hello));
+
         // CSS URI handler
         httpd_uri_t css = {
             .uri = "/style.css", .method = HTTP_GET, .handler = css_handler, .user_ctx = NULL, .is_websocket = false};
@@ -726,26 +600,6 @@ bool ADSBeeServer::TCPServerInit() {
                                            .post_connect_callback = nullptr,
                                            .message_received_callback = nullptr});
         network_metrics.Init();
-
-
-        httpd_uri_t fs_get_file = {
-            .uri = "/fs/file/*", .method = HTTP_GET, .handler = favicon_handler, .user_ctx = NULL, .is_websocket = false};
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_get_file));
-
-        httpd_uri_t fs_put_file = {
-            .uri = "/fs/file/*", .method = HTTP_PUT, .handler = favicon_handler, .user_ctx = NULL, .is_websocket = false};
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_put_file));
-
-        // DELETE /fs/file/<path>  (delete)
-        httpd_uri_t fs_delete_file = {
-            .uri = "/fs/file/*", .method = HTTP_DELETE, .handler = favicon_handler, .user_ctx = NULL, .is_websocket = false};
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_delete_file));
-
-        // GET /fs/list/<path>   (directory listing)
-        httpd_uri_t fs_list_dir = {
-            .uri = "/fs/list/*", .method = HTTP_GET, .handler = favicon_handler, .user_ctx = NULL, .is_websocket = false};
-        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_list_dir));
-
     } else {
         CONSOLE_ERROR("ADSBeeServer::TCPServerInit", "Failed to start HTTP server: %s, remaining stack %u Bytes.",
                       esp_err_to_name(ret), uxTaskGetStackHighWaterMark(NULL));
@@ -758,4 +612,3 @@ bool ADSBeeServer::TCPServerInit() {
 
     return server != nullptr;
 }
-
