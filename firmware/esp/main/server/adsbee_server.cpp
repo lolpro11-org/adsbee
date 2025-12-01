@@ -120,7 +120,7 @@ bool ADSBeeServer::Init() {
     sdmmc_card_t *card;
 
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
-    host.slot = SPI2_HOST;
+    host.slot = static_cast<spi_host_device_t>(SPI3_HOST);
     const char mount_point[] = "/sdcard";
 
     spi_bus_config_t bus_cfg = {
