@@ -112,15 +112,16 @@ bool ADSBeeServer::Init() {
     settings_manager.Apply();
 
     esp_err_t ret;
-
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
         .max_files = 5,
         .allocation_unit_size = 16 * 1024
     };
+    sdmmc_card_t *card;
 
-    sdspi_host_t host = SDSPI_HOST_DEFAULT();
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
     host.slot = SPI2_HOST;
+    const char mount_point[] = "/sdcard";
 
     spi_bus_config_t bus_cfg = {
         .mosi_io_num = PIN_MOSI,
@@ -133,21 +134,14 @@ bool ADSBeeServer::Init() {
 
     ret = spi_bus_initialize(host.slot, &bus_cfg, SDSPI_DEFAULT_DMA);
 
+    // SDSPI device slot config
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
     slot_config.gpio_cs = PIN_CS;
     slot_config.host_id = host.slot;
 
-    const char mount_point[] = "/sdcard";
+    ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
+    sdmmc_card_print_info(stdout, card);
 
-    ret = esp_vfs_fat_sdspi_mount(
-        mount_point,
-        &host,
-        &slot_config,
-        &mount_config,
-        &sd_card
-    );
-
-    sdmmc_card_print_info(stdout, sd_card);
     return TCPServerInit();
 }
 
