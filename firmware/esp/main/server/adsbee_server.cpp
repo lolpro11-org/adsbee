@@ -132,12 +132,12 @@ bool ADSBeeServer::Init() {
         .max_transfer_sz = 4000,
     };
 
-    ret = spi_bus_initialize(static_cast<spi_host_device_t>(host.slot), &bus_cfg, SDSPI_DEFAULT_DMA);
+    ret = spi_bus_initialize(SPI3_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
 
     // SDSPI device slot config
     sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
     slot_config.gpio_cs = PIN_CS;
-    slot_config.host_id = static_cast<spi_host_device_t>(host.slot);
+    slot_config.host_id = SPI3_HOST;
 
     ret = esp_vfs_fat_sdspi_mount(mount_point, &host, &slot_config, &mount_config, &card);
     sdmmc_card_print_info(stdout, card);
