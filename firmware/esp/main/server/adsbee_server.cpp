@@ -568,8 +568,24 @@ bool ADSBeeServer::TCPServerInit() {
         ESP_ERROR_CHECK(httpd_register_uri_handler(server, &root));
 
         httpd_uri_t hello = {
-            .uri = "/", .method = HTTP_GET, .handler = hello_handler, .user_ctx = NULL, .is_websocket = false};
-            ESP_ERROR_CHECK(httpd_register_uri_handler(server, &hello));
+            .uri = "/hello", .method = HTTP_GET, .handler = hello_handler, .user_ctx = NULL, .is_websocket = false};
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &hello));
+
+        httpd_uri_t fs_get_file = {
+            .uri = "/fs/*", .method = HTTP_GET, .handler = hello_handler, .user_ctx = NULL, .is_websocket = false};
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_get_file));
+
+        httpd_uri_t fs_put_file = {
+            .uri = "/fs/*", .method = HTTP_PUT, .handler = hello_handler, .user_ctx = NULL, .is_websocket = false};
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_put_file));
+
+        httpd_uri_t fs_delete_file = {
+            .uri = "/fs/*", .method = HTTP_DELETE, .handler = hello_handler, .user_ctx = NULL, .is_websocket = false};
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_delete_file));
+
+        httpd_uri_t fs_list_dir = {
+            .uri = "/fs/list/*", .method = HTTP_GET, .handler = hello_handler, .user_ctx = NULL, .is_websocket = false};
+        ESP_ERROR_CHECK(httpd_register_uri_handler(server, &fs_list_dir));
 
         // CSS URI handler
         httpd_uri_t css = {
